@@ -18,6 +18,8 @@ from auth import get_api_key
 from retention import RETENTION_POLICIES
 from rate_limiting import limiter, RATE_LIMITS
 from cors_config import CORS_CONFIG
+from tracing import init_tracing, get_tracer, add_span_attributes, record_exception
+from structured_logging import setup_logging, get_logger, RequestLogger
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -48,7 +50,10 @@ app_uptime = Gauge("app_uptime", "FastAPI app uptime indicator (1=running)")
 # Ingest counter
 INGEST_COUNTER = Counter("wotr_ingest_total", "Number of ingested events")
 
-logger = logging.getLogger(__name__)
+# Setup structured logging
+setup_logging()
+logger = get_logger(__name__)
+
 app = FastAPI(title="WOTR Data API")
 
 # Add rate limiter state and exception handler
@@ -70,15 +75,46 @@ app.add_middleware(
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
     start_time = time.time()
-    try:
-        response = await call_next(request)
-        latency = time.time() - start_time
-        REQUEST_LATENCY.labels(request.method, request.url.path).observe(latency)
-        REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
-        return response
-    except Exception as e:
-        ERROR_COUNT.labels(type(e).__name__).inc()
-        raise
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
+    # Structured logging context
+    with RequestLogger(logger, request_id, request.method, request.url.path):
+        try:
+            response = await call_next(request)
+            latency = time.time() - start_time
+            REQUEST_LATENCY.labels(request.method, request.url.path).observe(latency)
+            REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
+            
+            # Add request ID to response
+            response.headers["X-Request-ID"] = request_id
+            
+            # Log response
+            logger.info(
+                "Request processed",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "latency": latency,
+                }
+            )
+            
+            return response
+        except Exception as e:
+            ERROR_COUNT.labels(type(e).__name__).inc()
+            logger.error(
+                "Request error",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True
+            )
+            raise
 
 
 # ---- Environment Variables ----
@@ -153,74 +189,106 @@ class IngestPayload(BaseModel):
 @app.get("/health")
 @limiter.limit(RATE_LIMITS["health"])
 def health(request: Request):
-    details = {}
-    try:
-        conn = get_pg()
-        conn.close()
-        postgres_status.set(1)
-        details["postgres"] = "ok"
-    except Exception as e:
-        postgres_status.set(0)
-        details["postgres"] = str(e)
+    tracer = get_tracer()
+    with tracer.start_as_current_span("health_check") as span:
+        details = {}
+        try:
+            with tracer.start_as_current_span("postgres_check"):
+                conn = get_pg()
+                conn.close()
+                postgres_status.set(1)
+                details["postgres"] = "ok"
+        except Exception as e:
+            postgres_status.set(0)
+            details["postgres"] = str(e)
+            logger.error(f"Postgres health check failed: {e}")
 
-    try:
-        _ = get_minio()
-        minio_status.set(1)
-        details["minio"] = "ok"
-    except Exception as e:
-        minio_status.set(0)
-        details["minio"] = str(e)
+        try:
+            with tracer.start_as_current_span("minio_check"):
+                _ = get_minio()
+                minio_status.set(1)
+                details["minio"] = "ok"
+        except Exception as e:
+            minio_status.set(0)
+            details["minio"] = str(e)
+            logger.error(f"MinIO health check failed: {e}")
 
-    try:
-        _ = get_kafka()
-        kafka_status.set(1)
-        details["kafka"] = "ok"
-    except Exception as e:
-        kafka_status.set(0)
-        details["kafka"] = str(e)
+        try:
+            with tracer.start_as_current_span("kafka_check"):
+                _ = get_kafka()
+                kafka_status.set(1)
+                details["kafka"] = "ok"
+        except Exception as e:
+            kafka_status.set(0)
+            details["kafka"] = str(e)
+            logger.error(f"Kafka health check failed: {e}")
 
-    # ClickHouse health check
-    clickhouse_result = check_clickhouse()
-    if clickhouse_result == "ok":
-        clickhouse_status.set(1)
-        details["clickhouse"] = "ok"
-    else:
-        clickhouse_status.set(0)
-        details["clickhouse"] = clickhouse_result
+        # ClickHouse health check
+        with tracer.start_as_current_span("clickhouse_check"):
+            clickhouse_result = check_clickhouse()
+            if clickhouse_result == "ok":
+                clickhouse_status.set(1)
+                details["clickhouse"] = "ok"
+            else:
+                clickhouse_status.set(0)
+                details["clickhouse"] = clickhouse_result
+                logger.error(f"ClickHouse health check failed: {clickhouse_result}")
 
-    if all(v == "ok" for v in details.values()):
-        return {"status": "ok", "details": details}
-    else:
-        raise HTTPException(status_code=500, detail=details)
+        add_span_attributes(span, **{"services_checked": len(details), "all_healthy": all(v == "ok" for v in details.values())})
+        
+        if all(v == "ok" for v in details.values()):
+            return {"status": "ok", "details": details}
+        else:
+            raise HTTPException(status_code=500, detail=details)
 
 
 @app.post("/ingest")
 @limiter.limit(RATE_LIMITS["ingest"])
 def ingest(request: Request, item: IngestPayload, api_key: str = Depends(get_api_key)):
-    obj_id = item.id or str(uuid.uuid4())
-    ts = item.timestamp or datetime.utcnow().isoformat()
-    record = {"id": obj_id, "timestamp": ts, "payload": item.payload}
-    data = json.dumps(record).encode()
-    key = f"raw/{obj_id}.json"
+    tracer = get_tracer()
+    with tracer.start_as_current_span("ingest_event") as span:
+        obj_id = item.id or str(uuid.uuid4())
+        ts = item.timestamp or datetime.utcnow().isoformat()
+        record = {"id": obj_id, "timestamp": ts, "payload": item.payload}
+        data = json.dumps(record).encode()
+        key = f"raw/{obj_id}.json"
+        
+        add_span_attributes(span, event_id=obj_id, payload_size=len(data), bucket=MINIO_BUCKET)
+        logger.info(f"Ingesting event {obj_id}", extra={"event_id": obj_id, "size": len(data)})
 
-    with DB_QUERY_LATENCY.time():
-        minio = get_minio()
-        minio.put_object(MINIO_BUCKET, key, io.BytesIO(data), len(data), "application/json")
+        with DB_QUERY_LATENCY.time():
+            try:
+                # Upload to MinIO
+                with tracer.start_as_current_span("minio_upload"):
+                    minio = get_minio()
+                    minio.put_object(MINIO_BUCKET, key, io.BytesIO(data), len(data), "application/json")
+                    logger.debug(f"Uploaded to MinIO: {key}")
 
-        kafka = get_kafka()
-        # Serialize record explicitly to bytes so kafka-python accepts the payload
-        kafka.send(KAFKA_TOPIC, json.dumps(record).encode("utf-8"))
-        kafka.flush()
+                # Send to Kafka
+                with tracer.start_as_current_span("kafka_publish"):
+                    kafka = get_kafka()
+                    kafka.send(KAFKA_TOPIC, json.dumps(record).encode("utf-8"))
+                    kafka.flush()
+                    logger.debug(f"Published to Kafka topic: {KAFKA_TOPIC}")
 
-        conn = get_pg()
-        cur = conn.cursor()
-        cur.execute("INSERT INTO ingest_meta VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING;", (obj_id, key, datetime.utcnow(), len(data)))
-        conn.commit()
-        conn.close()
+                # Store metadata in Postgres
+                with tracer.start_as_current_span("postgres_insert"):
+                    conn = get_pg()
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO ingest_meta VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING;", (obj_id, key, datetime.utcnow(), len(data)))
+                    conn.commit()
+                    conn.close()
+                    logger.debug(f"Stored metadata in Postgres")
+                    
+            except Exception as e:
+                record_exception(span, e)
+                logger.error(f"Ingest failed for {obj_id}: {e}", extra={"event_id": obj_id, "error": str(e)}, exc_info=True)
+                raise
 
-    INGEST_COUNTER.inc()
+        INGEST_COUNTER.inc()
+        logger.info(f"Successfully ingested event {obj_id}", extra={"event_id": obj_id})
 
-    return {"id": obj_id, "object_key": key}
+        return {"id": obj_id, "object_key": key}
 
 
 @app.get("/metrics")
@@ -242,3 +310,6 @@ def get_retention_policies(request: Request, api_key: str = Depends(get_api_key)
 @app.on_event("startup")
 def on_startup():
     app_uptime.set(1)
+    # Initialize distributed tracing
+    init_tracing(app, service_name="wotr-api")
+    logger.info("WOTR API started", extra={"service": "wotr-api"})

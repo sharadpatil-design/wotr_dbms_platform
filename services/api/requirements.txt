@@ -13,4 +13,11 @@ clickhouse-driver==0.2.7
 slowapi>=0.1.9
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-instrumentation-fastapi>=0.41b0
+opentelemetry-instrumentation-kafka-python>=0.41b0
+opentelemetry-instrumentation-psycopg2>=0.41b0
+opentelemetry-exporter-jaeger>=1.20.0
+python-json-logger>=2.0.7
 
