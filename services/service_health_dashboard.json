@@ -1,0 +1,199 @@
+{
+  "id": null,
+  "uid": "wotr-service-health",
+  "title": "WOTR Platform - Service Health",
+  "tags": ["wotr","service","health"],
+  "timezone": "browser",
+  "schemaVersion": 35,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Postgres status",
+      "id": 1,
+      "datasource": "prometheus",
+      "targets": [
+        { "expr": "postgres_status", "legendFormat": "" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "dark-red" },
+              { "value": 0.5, "color": "orange" },
+              { "value": 0.9, "color": "green" }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "gridPos": {"x":0,"y":0,"w":4,"h":4},
+      "alert": {
+        "name": "Postgres down",
+        "conditions": [
+          {
+            "evaluator": {"type":"lt","params":[0.5]},
+            "operator": {"type": "and"},
+            "query": {"params":["A", "1m"]},
+            "reducer": {"type":"avg","params":[]}
+          }
+        ],
+        "for": "1m",
+        "freq": "30s",
+        "handler": 1,
+        "severity": "critical",
+        "notifications": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "MinIO status",
+      "id": 2,
+      "datasource": "prometheus",
+      "targets": [ { "expr": "minio_status", "legendFormat": "" } ],
+      "gridPos": {"x":4,"y":0,"w":4,"h":4},
+      "fieldConfig": { "defaults": { "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"dark-red"},{"value":0.5,"color":"orange"},{"value":0.9,"color":"green"}] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Kafka status",
+      "id": 3,
+      "datasource": "prometheus",
+      "targets": [ { "expr": "kafka_status", "legendFormat": "" } ],
+      "gridPos": {"x":8,"y":0,"w":4,"h":4},
+      "fieldConfig": { "defaults": { "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"dark-red"},{"value":0.5,"color":"orange"},{"value":0.9,"color":"green"}] } } }
+    },
+    {
+      "type": "stat",
+      "title": "ClickHouse status",
+      "id": 4,
+      "datasource": "prometheus",
+      "targets": [ { "expr": "clickhouse_status", "legendFormat": "" } ],
+      "gridPos": {"x":12,"y":0,"w":4,"h":4},
+      "fieldConfig": { "defaults": { "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"dark-red"},{"value":0.5,"color":"orange"},{"value":0.9,"color":"green"}] } } }
+    },
+    {
+      "type": "stat",
+      "title": "FastAPI uptime",
+      "id": 5,
+      "datasource": "prometheus",
+      "targets": [ { "expr": "app_uptime", "legendFormat": "" } ],
+      "gridPos": {"x":16,"y":0,"w":4,"h":4},
+      "fieldConfig": { "defaults": { "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"dark-red"},{"value":0.5,"color":"orange"},{"value":0.9,"color":"green"}] } } }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "FastAPI - Request rate (per minute)",
+      "id": 6,
+      "datasource": "prometheus",
+      "targets": [
+        { "expr": "rate(fastapi_requests_total[1m]) * 60", "legendFormat": "req/min" }
+      ],
+      "gridPos": {"x":0,"y":4,"w":12,"h":8},
+      "options": { "legend": { "displayMode": "list" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "FastAPI - Avg latency (5m)",
+      "id": 7,
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(fastapi_request_duration_seconds_sum[5m]) / rate(fastapi_request_duration_seconds_count[5m])",
+          "legendFormat": "avg latency (s)"
+        }
+      ],
+      "gridPos": {"x":12,"y":4,"w":8,"h":8},
+      "fieldConfig": {
+        "defaults": { "unit":"s", "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"green"},{"value":0.5,"color":"orange"},{"value":1.0,"color":"dark-red"}] } }
+      },
+      "alert": {
+        "name": "FastAPI high latency",
+        "conditions": [
+          {
+            "evaluator": {"type":"gt","params":[0.5]},
+            "operator": {"type":"and"},
+            "query": {"params":["A","5m"]},
+            "reducer": {"type":"avg","params":[]}
+          }
+        ],
+        "for":"5m",
+        "freq":"30s",
+        "handler":1,
+        "severity":"critical",
+        "notifications":[]
+      }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "DB Query Latency (fastapi_db_query_duration_seconds avg 5m)",
+      "id": 8,
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(fastapi_db_query_duration_seconds_sum[5m]) / rate(fastapi_db_query_duration_seconds_count[5m])",
+          "legendFormat": "db avg (s)"
+        }
+      ],
+      "gridPos": {"x":0,"y":12,"w":12,"h":8},
+      "fieldConfig": { "defaults": { "unit":"s", "thresholds": { "mode":"absolute","steps":[{"value":null,"color":"green"},{"value":0.5,"color":"orange"},{"value":1.0,"color":"dark-red"}] } } }
+    },
+
+    {
+      "type": "gauge",
+      "title": "Service health summary",
+      "id": 9,
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "((postgres_status>0) + (minio_status>0) + (kafka_status>0) + (clickhouse_status>0) + (app_uptime>0)) / 5 * 100",
+          "legendFormat": "healthy_percent"
+        }
+      ],
+      "gridPos": {"x":12,"y":12,"w":8,"h":8},
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "percentage", "steps": [ {"value": null, "color": "dark-red"}, {"value": 60, "color": "orange"}, {"value": 90, "color": "green"} ] } } }
+    },
+
+    {
+      "type": "stat",
+      "title": "FastAPI Requests total",
+      "id": 10,
+      "datasource": "prometheus",
+      "targets": [ { "expr": "increase(fastapi_requests_total[5m])", "legendFormat": "requests (5m)" } ],
+      "gridPos": {"x":20,"y":4,"w":4,"h":4}
+    },
+
+    {
+      "type": "text",
+      "title": "Notes",
+      "id": 11,
+      "options": { "content": "Service Health dashboard — data source: **prometheus**. Alerts are panel-level; add notification channels in Grafana.", "mode":"markdown" },
+      "gridPos": {"x":20,"y":8,"w":4,"h":4}
+    }
+  ],
+
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "DS_PROM",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": { "text": "prometheus", "value": "prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+
+  "annotations": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["30s","1m","5m","30m","1h"], "time_options": ["5m","1h","6h","12h","24h","7d"] },
+  "schemaVersion": 35,
+  "version": 1,
+  "links": []
+}

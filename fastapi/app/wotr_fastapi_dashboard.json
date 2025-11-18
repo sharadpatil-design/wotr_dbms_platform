@@ -1,0 +1,218 @@
+{
+  "id": null,
+  "uid": "wotr-fastapi-health",
+  "title": "WOTR Platform - FastAPI & Service Health",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "style": "light",
+  "editable": true,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Service Health",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1,
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 5 },
+      "type": "stat",
+      "title": "FastAPI Uptime",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "app_uptime", "refId": "A" }
+      ],
+      "options": {
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP" }, "0": { "text": "DOWN" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "alert": {
+        "name": "FastAPI Down",
+        "conditions": [
+          {
+            "evaluator": { "params": [1], "type": "lt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "type": "last" },
+            "type": "query"
+          }
+        ],
+        "for": "2m",
+        "annotations": {},
+        "executionErrorState": "alerting",
+        "noDataState": "no_data",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "FastAPI instance is DOWN!"
+      }
+    },
+    {
+      "id": 2,
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 5 },
+      "type": "stat",
+      "title": "Postgres",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "postgres_status", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "1": { "text": "UP" }, "0": { "text": "DOWN" } } }],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 5 },
+      "type": "stat",
+      "title": "MinIO",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "minio_status", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "1": { "text": "UP" }, "0": { "text": "DOWN" } } }],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "gridPos": { "x": 0, "y": 6, "w": 6, "h": 5 },
+      "type": "stat",
+      "title": "Kafka",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "kafka_status", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "1": { "text": "UP" }, "0": { "text": "DOWN" } } }],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "gridPos": { "x": 6, "y": 6, "w": 6, "h": 5 },
+      "type": "stat",
+      "title": "ClickHouse",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "clickhouse_status", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "1": { "text": "UP" }, "0": { "text": "DOWN" } } }],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "FastAPI Performance",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "gridPos": { "x": 0, "y": 11, "w": 12, "h": 7 },
+      "type": "timeseries",
+      "title": "Request Latency (seconds)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(fastapi_request_duration_seconds_sum[5m]) / rate(fastapi_request_duration_seconds_count[5m])", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "alert": {
+        "name": "High Request Latency",
+        "conditions": [
+          {
+            "evaluator": { "params": [1], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "for": "3m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "FastAPI request latency is high!"
+      }
+    },
+    {
+      "id": 7,
+      "gridPos": { "x": 12, "y": 11, "w": 12, "h": 7 },
+      "type": "timeseries",
+      "title": "Requests Per Second",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(fastapi_requests_total[1m])", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "req/s", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 8,
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 6 },
+      "type": "timeseries",
+      "title": "Errors by Type",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "increase(fastapi_error_total[5m])", "refId": "A" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } }
+    }
+  ],
+  "templating": { "list": [] },
+  "time": { "from": "now-30m", "to": "now" }
+}

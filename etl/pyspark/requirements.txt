@@ -1,0 +1,4 @@
+pyspark==3.4.1
+boto3
+s3fs
+pandas

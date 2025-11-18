@@ -1,0 +1,1 @@
+[{"labels":{"alertname":"TestNotification","severity":"critical"},"annotations":{"summary":"test-delivery"},"startsAt":"2025-11-07T07:00:00Z"}]

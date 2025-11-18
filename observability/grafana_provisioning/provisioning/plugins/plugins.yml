@@ -1,0 +1,4 @@
+apiVersion: 1
+# Minimal plugins provisioning file to satisfy Grafana's file suffix requirements.
+# Add plugin provisioning entries here if you intend to pre-install or configure plugins.
+providers: []

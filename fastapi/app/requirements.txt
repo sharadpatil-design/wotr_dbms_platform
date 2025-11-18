@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+kafka-python
+psycopg2-binary
+clickhouse-driver
+requests
+pydantic

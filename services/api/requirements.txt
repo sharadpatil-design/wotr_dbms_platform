@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary
+sqlalchemy
+kafka-python
+minio
+pydantic
+prometheus-client
+boto3
+python-dotenv
+requests
+clickhouse-driver==0.2.7
+

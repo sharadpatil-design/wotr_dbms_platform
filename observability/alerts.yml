@@ -1,0 +1,69 @@
+groups:
+  - name: fastapi_service_alerts
+    rules:
+      - alert: FastAPIHighLatency
+        expr: histogram_quantile(0.95, rate(fastapi_request_duration_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High FastAPI latency detected"
+          description: "FastAPI p95 request latency > 1s for 2 minutes."
+
+      - alert: FastAPIErrors
+        expr: rate(fastapi_error_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI error spike"
+          description: "FastAPI errors occurring consistently for 1 minute."
+
+  - name: service_status_alerts
+    rules:
+      - alert: PostgresDown
+        expr: postgres_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres is down"
+          description: "PostgreSQL service unreachable."
+
+      - alert: ClickHouseDown
+        expr: clickhouse_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ClickHouse is down"
+          description: "ClickHouse service unreachable."
+
+      - alert: KafkaDown
+        expr: kafka_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka is down"
+          description: "Kafka broker unreachable."
+
+      - alert: MinioDown
+        expr: minio_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO is down"
+          description: "MinIO storage service unreachable."
+
+  - name: node_alerts
+    rules:
+      - alert: HostHighCPU
+        expr: 100 - (avg by(instance)(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage > 80% for 5 minutes"

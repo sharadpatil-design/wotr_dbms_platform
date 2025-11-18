@@ -1,0 +1,66 @@
+groups:
+  - name: wotr-service-health
+    interval: 30s
+    rules:
+      - alert: PostgresDown
+        expr: postgres_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres is down"
+          description: "postgres_status == 0 for more than 1m"
+
+      - alert: MinIODown
+        expr: minio_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO is down"
+          description: "minio_status == 0 for more than 1m"
+
+      - alert: KafkaDown
+        expr: kafka_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka (Redpanda) is down"
+          description: "kafka_status == 0 for more than 1m"
+
+      - alert: ClickHouseDown
+        expr: clickhouse_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ClickHouse is down"
+          description: "clickhouse_status == 0 for more than 1m"
+
+      - alert: FastAPIDown
+        expr: app_uptime == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI is not running"
+          description: "app_uptime == 0 for more than 1m"
+
+      - alert: FastAPIHighLatency
+        expr: (rate(fastapi_request_duration_seconds_sum[5m]) / rate(fastapi_request_duration_seconds_count[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI high average latency"
+          description: "Average request latency > 0.5s (5m)"
+
+      - alert: FastAPIErrorSpike
+        expr: (increase(fastapi_error_total[5m]) > 0) and (increase(fastapi_error_total[5m]) / (increase(fastapi_requests_total[5m]) + 1) > 0.01)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI error rate spike"
+          description: "Error rate > 1% in last 5m"

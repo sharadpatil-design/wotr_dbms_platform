@@ -1,0 +1,4 @@
+apiVersion: 1
+# Minimal alerting provisioning file. If you plan to manage Grafana alerting rules via provisioning,
+# add providers here. For now this exists to silence missing-directory warnings.
+providers: []

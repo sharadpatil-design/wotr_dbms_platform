@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+.vscode/
+docker-compose.override.yml
+
+# Local secrets for observability (do not commit real secrets)
+observability/secrets/

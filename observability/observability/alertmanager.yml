@@ -1,0 +1,36 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "slack-notifications"
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 1h
+
+receivers:
+  - name: "slack-notifications"
+    slack_configs:
+      - send_resolved: true
+        channel: "#wotr-alerts"
+        username: "Alertmanager"
+        icon_emoji: ":rotating_light:"
+        api_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"  # <--- replace with your real webhook
+        text: >
+          *Alert:* {{ .CommonLabels.alertname }}
+          *Status:* {{ .Status }}
+          *Severity:* {{ .CommonLabels.severity }}
+          *Instance:* {{ .CommonLabels.instance }}
+          *Description:* {{ .CommonAnnotations.description }}
+
+
+receivers:
+  - name: slack-notifications
+    slack_configs:
+      - send_resolved: true
+        api_url_file: /etc/alertmanager/secrets/webhook_url
+        channel: "#wotr-alerts"
+        username: "Alertmanager"
+        title: "🔥 WOTR Alert: {{ .CommonLabels.alertname }}"
+        text: >
+          Severity: {{ .CommonLabels.severity }}
+          Description: {{ .CommonAnnotations.description }}
