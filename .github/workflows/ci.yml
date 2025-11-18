@@ -105,19 +105,23 @@ jobs:
       - name: Run smoke test
         run: python3 ci/smoke_test.py
 
-      - name: Run unit tests with coverage (if available)
+      - name: Run unit tests with coverage
         continue-on-error: true
         run: |
-          if [ -d "tests" ]; then
-            pytest tests/ --cov=services --cov=ci --cov-report=xml --cov-report=term
-          fi
+          pip install -r tests/requirements.txt
+          pytest services/api/tests/ -v --cov=services/api/app --cov-report=xml --cov-report=term
+          
+      - name: Run integration tests
+        continue-on-error: true
+        run: |
+          pytest tests/integration/ -v -s -m integration
 
       - name: Upload coverage reports
         if: always()
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage.xml
-          flags: integration
+          flags: unittests,integration
           fail_ci_if_error: false
 
       - name: Assert alert delivery to test-receiver

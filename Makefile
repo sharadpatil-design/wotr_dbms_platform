@@ -40,3 +40,28 @@ start-retention-scheduler:
 stop-schedulers:
 	docker-compose -f docker-compose.backup.yml down
 	docker-compose -f docker-compose.retention.yml down
+
+# Testing commands
+.PHONY: test test-unit test-integration test-load benchmark install-test-deps
+
+install-test-deps:
+	pip install -r tests/requirements.txt
+
+test-unit:
+	pytest services/api/tests/ -v
+
+test-unit-cov:
+	pytest services/api/tests/ -v --cov=services/api/app --cov-report=html --cov-report=term
+
+test-integration:
+	pytest tests/integration/ -v -s -m integration
+
+test: test-unit
+
+benchmark:
+	python tests/benchmark/benchmark.py
+
+test-load:
+	@echo "Starting Locust load test..."
+	@echo "Access web UI at http://localhost:8089"
+	locust -f tests/load/load_test.py --host http://localhost:8000
