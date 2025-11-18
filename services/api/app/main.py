@@ -2,6 +2,7 @@ import io, os, uuid, json, time, logging
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from minio import Minio, S3Error
 from kafka import KafkaProducer
@@ -11,8 +12,12 @@ from prometheus_client import (
     Counter, Histogram, Gauge,
     generate_latest, CONTENT_TYPE_LATEST
 )
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from auth import get_api_key
 from retention import RETENTION_POLICIES
+from rate_limiting import limiter, RATE_LIMITS
+from cors_config import CORS_CONFIG
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -45,6 +50,21 @@ INGEST_COUNTER = Counter("wotr_ingest_total", "Number of ingested events")
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="WOTR Data API")
+
+# Add rate limiter state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_CONFIG["allow_origins"],
+    allow_credentials=CORS_CONFIG["allow_credentials"],
+    allow_methods=CORS_CONFIG["allow_methods"],
+    allow_headers=CORS_CONFIG["allow_headers"],
+    expose_headers=CORS_CONFIG["expose_headers"],
+    max_age=CORS_CONFIG["max_age"],
+)
 
 # Middleware for request tracking
 @app.middleware("http")
@@ -131,7 +151,8 @@ class IngestPayload(BaseModel):
 
 
 @app.get("/health")
-def health():
+@limiter.limit(RATE_LIMITS["health"])
+def health(request: Request):
     details = {}
     try:
         conn = get_pg()
@@ -174,7 +195,8 @@ def health():
 
 
 @app.post("/ingest")
-def ingest(item: IngestPayload, api_key: str = Depends(get_api_key)):
+@limiter.limit(RATE_LIMITS["ingest"])
+def ingest(request: Request, item: IngestPayload, api_key: str = Depends(get_api_key)):
     obj_id = item.id or str(uuid.uuid4())
     ts = item.timestamp or datetime.utcnow().isoformat()
     record = {"id": obj_id, "timestamp": ts, "payload": item.payload}
@@ -202,12 +224,14 @@ def ingest(item: IngestPayload, api_key: str = Depends(get_api_key)):
 
 
 @app.get("/metrics")
-def metrics():
+@limiter.limit(RATE_LIMITS["metrics"])
+def metrics(request: Request):
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/retention-policies")
-def get_retention_policies(api_key: str = Depends(get_api_key)):
+@limiter.limit(RATE_LIMITS["retention"])
+def get_retention_policies(request: Request, api_key: str = Depends(get_api_key)):
     """Get current retention policy configuration"""
     return {
         "policies": RETENTION_POLICIES,

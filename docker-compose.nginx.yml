@@ -1,0 +1,28 @@
+# Add nginx service for SSL termination
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: wotr-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - fastapi
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  nginx-logs:
+    driver: local
+
+networks:
+  default:
+    external: true
+    name: wotr_dbms_platform_default
