@@ -1,0 +1,67 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.example.com
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Container Registry (optional)
+        if: false  # Enable when you have a container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and tag images
+        run: |
+          docker-compose build
+          # Tag images with commit SHA for versioning
+          docker tag wotr_dbms_platform-fastapi:latest wotr_dbms_platform-fastapi:${{ github.sha }}
+
+      - name: Deploy notification
+        run: |
+          echo "Deployment workflow ready"
+          echo "To enable actual deployment:"
+          echo "1. Set up your deployment target (VM, K8s, etc.)"
+          echo "2. Configure deployment secrets in GitHub"
+          echo "3. Uncomment deployment steps below"
+
+      # Uncomment and configure these steps when ready to deploy
+      # - name: Deploy to VM via SSH
+      #   uses: appleboy/ssh-action@master
+      #   with:
+      #     host: ${{ secrets.DEPLOY_HOST }}
+      #     username: ${{ secrets.DEPLOY_USER }}
+      #     key: ${{ secrets.DEPLOY_KEY }}
+      #     script: |
+      #       cd /opt/wotr_dbms_platform
+      #       git pull
+      #       docker-compose down
+      #       docker-compose up -d --build
+
+      # - name: Health check after deployment
+      #   run: |
+      #     sleep 30
+      #     curl -f https://staging.example.com/health || exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Build completed successfully"
+          echo "📦 Artifacts tagged: ${{ github.sha }}"
+          echo "🚀 Ready for deployment configuration"
