@@ -7,11 +7,14 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ingest-events")
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "clickhouse")
 CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", 9000))
 CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "wotr")
+CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "")
 
 print(f"[Consumer] Starting consumer on {KAFKA_BOOTSTRAP}, topic {KAFKA_TOPIC}")
+print(f"[Consumer] ClickHouse: {CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}, DB: {CLICKHOUSE_DB}, User: {CLICKHOUSE_USER}")
 
 time.sleep(10)
-client = Client(host=CLICKHOUSE_HOST, port=CLICKHOUSE_PORT)
+client = Client(host=CLICKHOUSE_HOST, port=CLICKHOUSE_PORT, user=CLICKHOUSE_USER, password=CLICKHOUSE_PASSWORD)
 
 client.execute(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DB}")
 client.execute(f"""

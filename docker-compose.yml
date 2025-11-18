@@ -57,6 +57,11 @@ services:
       - "9009:9000"    # changed host port
     volumes:
       - clickhousedata:/var/lib/clickhouse
+      - ./observability/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+    environment:
+      - CLICKHOUSE_DB=wotr
+      - CLICKHOUSE_USER=wotr
+      - CLICKHOUSE_PASSWORD=wotrpass
 
 
   prometheus:
@@ -107,8 +112,8 @@ services:
       MINIO_BUCKET: "raw-data"
       CLICKHOUSE_HOST: "clickhouse"
       CLICKHOUSE_PORT: "9000"
-      CLICKHOUSE_USER: "default"
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_USER: "wotr"
+      CLICKHOUSE_PASSWORD: "wotrpass"
 
   consumer:
     build: ./services/consumer
@@ -121,6 +126,8 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=9000
       - CLICKHOUSE_DB=wotr
+      - CLICKHOUSE_USER=wotr
+      - CLICKHOUSE_PASSWORD=wotrpass
     restart: always
     volumes:
       - ./services/consumer:/app

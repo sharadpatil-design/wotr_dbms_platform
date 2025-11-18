@@ -109,15 +109,12 @@ def get_kafka():
 
 def check_clickhouse():
     try:
-        password = os.getenv("CLICKHOUSE_PASSWORD", "")
-        client_kwargs = {
-            "host": os.getenv("CLICKHOUSE_HOST", "clickhouse"),
-            "port": int(os.getenv("CLICKHOUSE_PORT", 9000)),
-            "user": os.getenv("CLICKHOUSE_USER", "default"),
-        }
-        if password:
-            client_kwargs["password"] = password
-        client = ClickHouseClient(**client_kwargs)
+        client = ClickHouseClient(
+            host=os.getenv("CLICKHOUSE_HOST", "clickhouse"),
+            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
+            user=os.getenv("CLICKHOUSE_USER", "default"),
+            password=os.getenv("CLICKHOUSE_PASSWORD", "")
+        )
         client.execute("SELECT 1")
         return "ok"
     except Exception as e:
@@ -159,18 +156,16 @@ def health():
         kafka_status.set(0)
         details["kafka"] = str(e)
 
-    # ClickHouse health check disabled - consumer connects fine, but health check has auth issues
-    # clickhouse_result = check_clickhouse()
-    # if clickhouse_result == "ok":
-    #     clickhouse_status.set(1)
-    #     details["clickhouse"] = "ok"
-    # else:
-    #     clickhouse_status.set(0)
-    #     details["clickhouse"] = clickhouse_result
-    clickhouse_status.set(1)
-    details["clickhouse"] = "ok (check disabled)"
+    # ClickHouse health check
+    clickhouse_result = check_clickhouse()
+    if clickhouse_result == "ok":
+        clickhouse_status.set(1)
+        details["clickhouse"] = "ok"
+    else:
+        clickhouse_status.set(0)
+        details["clickhouse"] = clickhouse_result
 
-    if all(v == "ok" or "check disabled" in str(v) for v in details.values()):
+    if all(v == "ok" for v in details.values()):
         return {"status": "ok", "details": details}
     else:
         raise HTTPException(status_code=500, detail=details)
