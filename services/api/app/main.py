@@ -38,6 +38,9 @@ kafka_status = Gauge("kafka_status", "Kafka connection status (1=up, 0=down)")
 clickhouse_status = Gauge("clickhouse_status", "ClickHouse connection status (1=up, 0=down)")
 app_uptime = Gauge("app_uptime", "FastAPI app uptime indicator (1=running)")
 
+# Ingest counter
+INGEST_COUNTER = Counter("wotr_ingest_total", "Number of ingested events")
+
 logger = logging.getLogger(__name__)
 app = FastAPI(title="WOTR Data API")
 
@@ -196,8 +199,7 @@ def ingest(item: IngestPayload):
         conn.commit()
         conn.close()
 
-    ingest_counter = Counter("wotr_ingest_total", "Number of ingested events")
-    ingest_counter.inc()
+    INGEST_COUNTER.inc()
 
     return {"id": obj_id, "object_key": key}
 
