@@ -67,3 +67,61 @@ groups:
         annotations:
           summary: "High CPU usage on {{ $labels.instance }}"
           description: "CPU usage > 80% for 5 minutes"
+
+  - name: advanced_fastapi_alerts
+    rules:
+      - alert: FastAPIHighErrorRate
+        expr: (rate(fastapi_error_total[5m]) / rate(fastapi_requests_total[5m])) * 100 > 5
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI error rate exceeded 5%"
+          description: "Error rate is {{ $value | humanize }}% over the last 5 minutes."
+
+      - alert: FastAPIRequestSpike
+        expr: rate(fastapi_requests_total[1m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI request spike detected"
+          description: "Request rate exceeded 100 req/sec for 2 minutes (current: {{ $value | humanize }} req/sec)."
+
+      - alert: FastAPINoTraffic
+        expr: rate(fastapi_requests_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI receiving no traffic"
+          description: "No requests received for 5 minutes."
+
+      - alert: FastAPISlowDBQueries
+        expr: rate(fastapi_db_query_duration_seconds_sum[5m]) / rate(fastapi_db_query_duration_seconds_count[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average DB query latency > 0.5s for 3 minutes."
+
+  - name: data_pipeline_alerts
+    rules:
+      - alert: IngestRateDrop
+        expr: rate(wotr_ingest_total[5m]) < 0.1 and rate(wotr_ingest_total[10m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingest rate dropped significantly"
+          description: "Ingest rate dropped below 0.1 ops/sec after being active."
+
+      - alert: MultipleServicesDown
+        expr: (postgres_status + clickhouse_status + kafka_status + minio_status) < 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple backend services are down"
+          description: "At least 2 backend services are unreachable."

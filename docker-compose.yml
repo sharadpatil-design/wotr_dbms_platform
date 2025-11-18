@@ -77,8 +77,10 @@ services:
     volumes:
       # Provisioning (datasources, dashboards provider YAMLs)
       - ./observability/grafana_provisioning/provisioning:/etc/grafana/provisioning:ro
-      # Dashboard JSON files (mounted where the provider points to)
+      # Dashboard JSON files (mounted where the provider points to) - old location
       - ./observability:/var/lib/grafana/dashboards:ro
+      # New dashboards directory
+      - ./observability/dashboards:/etc/grafana/provisioning/dashboards:ro
 
   fastapi:
     build:
