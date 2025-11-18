@@ -1,0 +1,53 @@
+# Data Retention Cron Job
+# Runs retention_cleanup.py on a schedule
+
+version: '3.8'
+
+services:
+  retention-scheduler:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    container_name: wotr-retention-scheduler
+    depends_on:
+      - postgres
+      - clickhouse
+      - minio
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=wotr
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_USER=wotr
+      - CLICKHOUSE_PASSWORD=wotrpass
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      # Retention policy configuration
+      - CLICKHOUSE_RETENTION_ENABLED=true
+      - CLICKHOUSE_RETENTION_DAYS=90
+      - MINIO_RAW_RETENTION_ENABLED=true
+      - MINIO_RAW_RETENTION_DAYS=30
+      - MINIO_CURATED_RETENTION_ENABLED=false
+      - MINIO_CURATED_RETENTION_DAYS=365
+      - POSTGRES_METADATA_RETENTION_ENABLED=true
+      - POSTGRES_METADATA_RETENTION_DAYS=180
+      - RETENTION_SCHEDULE=${RETENTION_SCHEDULE:-0 3 * * *}  # 3 AM daily by default
+    command: >
+      sh -c "
+        echo 'Setting up retention cleanup cron job...' &&
+        echo '$${RETENTION_SCHEDULE} cd /app && python retention_cleanup.py >> /var/log/retention.log 2>&1' > /etc/crontabs/root &&
+        echo 'Starting cron daemon...' &&
+        crond -f -l 2
+      "
+    restart: unless-stopped
+    networks:
+      - default
+
+networks:
+  default:
+    external: true
+    name: wotr_dbms_platform_default

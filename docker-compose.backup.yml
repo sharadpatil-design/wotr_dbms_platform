@@ -1,0 +1,47 @@
+# Backup automation using docker-compose
+# Runs scheduled backups of PostgreSQL, ClickHouse, and MinIO
+
+version: '3.8'
+
+services:
+  backup-scheduler:
+    image: alpine:latest
+    container_name: wotr-backup-scheduler
+    volumes:
+      - ./scripts:/scripts:ro
+      - backup-data:/backups
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=wotr
+      - CLICKHOUSE_USER=wotr
+      - CLICKHOUSE_PASSWORD=wotrpass
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - BACKUP_ROOT=/backups
+      - BACKUP_RETENTION_COUNT=7
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}  # 2 AM daily by default
+    command: >
+      sh -c "
+        apk add --no-cache docker-cli postgresql-client bash curl &&
+        wget https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/local/bin/mc &&
+        chmod +x /usr/local/bin/mc &&
+        echo 'Installing crond...' &&
+        echo '$${BACKUP_SCHEDULE} /scripts/backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root &&
+        echo 'Starting cron daemon...' &&
+        crond -f -l 2
+      "
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  backup-data:
+    driver: local
+
+networks:
+  default:
+    external: true
+    name: wotr_dbms_platform_default

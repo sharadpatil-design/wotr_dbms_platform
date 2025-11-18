@@ -1,6 +1,6 @@
 import io, os, uuid, json, time, logging
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
 from minio import Minio, S3Error
@@ -11,6 +11,8 @@ from prometheus_client import (
     Counter, Histogram, Gauge,
     generate_latest, CONTENT_TYPE_LATEST
 )
+from auth import get_api_key
+from retention import RETENTION_POLICIES
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -172,7 +174,7 @@ def health():
 
 
 @app.post("/ingest")
-def ingest(item: IngestPayload):
+def ingest(item: IngestPayload, api_key: str = Depends(get_api_key)):
     obj_id = item.id or str(uuid.uuid4())
     ts = item.timestamp or datetime.utcnow().isoformat()
     record = {"id": obj_id, "timestamp": ts, "payload": item.payload}
@@ -202,6 +204,15 @@ def ingest(item: IngestPayload):
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/retention-policies")
+def get_retention_policies(api_key: str = Depends(get_api_key)):
+    """Get current retention policy configuration"""
+    return {
+        "policies": RETENTION_POLICIES,
+        "note": "Run retention_cleanup.py script to apply policies"
+    }
 
 
 @app.on_event("startup")
