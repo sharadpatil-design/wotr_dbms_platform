@@ -22,6 +22,8 @@ from tracing import init_tracing, get_tracer, add_span_attributes, record_except
 from structured_logging import setup_logging, get_logger, RequestLogger
 from schemas import IngestRequest, validate_payload, DataQualityCheck, ValidationResult
 from schema_evolution import get_schema_registry, AvroSerializer
+from admin import router as admin_router
+from data_explorer import router as explorer_router
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -73,6 +75,10 @@ app = FastAPI(title="WOTR Data API")
 # Add rate limiter state and exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Include operational routers
+app.include_router(admin_router)
+app.include_router(explorer_router)
 
 # Add CORS middleware
 app.add_middleware(
