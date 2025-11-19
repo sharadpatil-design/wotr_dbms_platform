@@ -20,6 +20,8 @@ from rate_limiting import limiter, RATE_LIMITS
 from cors_config import CORS_CONFIG
 from tracing import init_tracing, get_tracer, add_span_attributes, record_exception
 from structured_logging import setup_logging, get_logger, RequestLogger
+from schemas import IngestRequest, validate_payload, DataQualityCheck, ValidationResult
+from schema_evolution import get_schema_registry, AvroSerializer
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -49,6 +51,18 @@ app_uptime = Gauge("app_uptime", "FastAPI app uptime indicator (1=running)")
 
 # Ingest counter
 INGEST_COUNTER = Counter("wotr_ingest_total", "Number of ingested events")
+
+# Validation metrics
+VALIDATION_FAILURES = Counter(
+    "wotr_validation_failures_total",
+    "Total validation failures",
+    ["reason"]
+)
+
+DATA_QUALITY_SCORE = Histogram(
+    "wotr_data_quality_score",
+    "Data quality completeness score"
+)
 
 # Setup structured logging
 setup_logging()
@@ -180,10 +194,28 @@ def check_clickhouse():
 
 
 # ---- Routes ----
-class IngestPayload(BaseModel):
-    id: str | None = None
-    timestamp: str | None = None
-    payload: dict
+# Using enhanced schema from schemas.py
+
+
+@app.post("/validate")
+@limiter.limit("60/minute")
+def validate_event(request: Request, payload: dict):
+    """
+    Validate event payload without ingesting
+    Useful for client-side validation
+    """
+    tracer = get_tracer()
+    with tracer.start_as_current_span("validate_payload"):
+        validation_result = validate_payload(payload)
+        
+        if not validation_result.valid:
+            VALIDATION_FAILURES.labels(reason="schema_error").inc()
+        
+        return {
+            "valid": validation_result.valid,
+            "errors": validation_result.errors,
+            "warnings": validation_result.warnings
+        }
 
 
 @app.get("/health")
@@ -244,17 +276,53 @@ def health(request: Request):
 
 @app.post("/ingest")
 @limiter.limit(RATE_LIMITS["ingest"])
-def ingest(request: Request, item: IngestPayload, api_key: str = Depends(get_api_key)):
+def ingest(request: Request, item: IngestRequest, api_key: str = Depends(get_api_key)):
     tracer = get_tracer()
     with tracer.start_as_current_span("ingest_event") as span:
+        # Validate payload
+        validation_result = validate_payload(item.payload.dict())
+        if not validation_result.valid:
+            VALIDATION_FAILURES.labels(reason="schema_error").inc()
+            logger.warning(
+                f"Validation failed",
+                extra={"errors": validation_result.errors}
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Validation failed",
+                    "errors": validation_result.errors,
+                    "warnings": validation_result.warnings
+                }
+            )
+        
+        # Calculate data quality score
+        quality_score = DataQualityCheck.check_completeness(item.payload.dict())
+        DATA_QUALITY_SCORE.observe(quality_score)
+        
         obj_id = item.id or str(uuid.uuid4())
         ts = item.timestamp or datetime.utcnow().isoformat()
-        record = {"id": obj_id, "timestamp": ts, "payload": item.payload}
+        record = {"id": obj_id, "timestamp": ts, "payload": item.payload.dict()}
         data = json.dumps(record).encode()
         key = f"raw/{obj_id}.json"
         
-        add_span_attributes(span, event_id=obj_id, payload_size=len(data), bucket=MINIO_BUCKET)
-        logger.info(f"Ingesting event {obj_id}", extra={"event_id": obj_id, "size": len(data)})
+        add_span_attributes(
+            span,
+            event_id=obj_id,
+            payload_size=len(data),
+            bucket=MINIO_BUCKET,
+            quality_score=quality_score,
+            event_type=item.payload.event_type
+        )
+        logger.info(
+            f"Ingesting event {obj_id}",
+            extra={
+                "event_id": obj_id,
+                "size": len(data),
+                "quality_score": quality_score,
+                "event_type": item.payload.event_type
+            }
+        )
 
         with DB_QUERY_LATENCY.time():
             try:
