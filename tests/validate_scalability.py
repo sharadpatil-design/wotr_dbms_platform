@@ -27,6 +27,9 @@ BLUE = "\033[94m"
 RESET = "\033[0m"
 
 API_BASE_URL = "http://localhost:8000"
+# Test API key (default key from auth.py)
+API_KEY = os.getenv("TEST_API_KEY", "dev-key-12345")
+HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
 class ValidationTest:
     """Validation test runner."""
@@ -201,6 +204,7 @@ def test_basic_ingest():
         response = requests.post(
             f"{API_BASE_URL}/ingest",
             json=test_payload,
+            headers=HEADERS,
             timeout=10
         )
         
@@ -261,7 +265,7 @@ def test_admin_dashboard():
 def test_admin_stats_api():
     """Test admin stats API endpoint."""
     try:
-        response = requests.get(f"{API_BASE_URL}/admin/stats", timeout=10)
+        response = requests.get(f"{API_BASE_URL}/admin/stats", headers=HEADERS, timeout=10)
         
         if response.status_code == 200:
             stats = response.json()

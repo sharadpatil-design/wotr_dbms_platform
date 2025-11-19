@@ -417,13 +417,24 @@ def on_startup():
     except Exception as e:
         logger.warning(f"Failed to initialize cache (non-fatal): {e}")
     
-    # Initialize ClickHouse optimizations
-    try:
-        clickhouse_client = get_clickhouse_client()
-        initialize_clickhouse_optimizations(clickhouse_client)
-        logger.info("ClickHouse optimizations initialized")
-    except Exception as e:
-        logger.warning(f"Failed to initialize ClickHouse optimizations (non-fatal): {e}")
+    # Initialize ClickHouse optimizations with retry
+    max_retries = 3
+    retry_delay = 2
+    for attempt in range(max_retries):
+        try:
+            clickhouse_client = get_clickhouse_client()
+            # Test connection
+            clickhouse_client.execute("SELECT 1")
+            initialize_clickhouse_optimizations(clickhouse_client)
+            logger.info("ClickHouse optimizations initialized")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"ClickHouse not ready (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.warning(f"Failed to initialize ClickHouse optimizations after {max_retries} attempts (non-fatal): {e}")
     
     # Initialize database schema
     try:

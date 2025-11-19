@@ -205,7 +205,7 @@ def cache_result(cache_type: str, ttl: int = CacheManager.TTL_MEDIUM, key_prefix
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Import here to avoid circular dependency
-            from connection_pool import get_redis_client
+            from .connection_pool import get_redis_client
             
             try:
                 redis_client = get_redis_client()
@@ -332,7 +332,7 @@ def warm_stats_cache(cache_manager: CacheManager):
     logger.info("Warming stats cache...")
     
     try:
-        from connection_pool import get_clickhouse_client
+        from .connection_pool import get_clickhouse_client
         
         stats_cache = StatsCache(cache_manager)
         client = get_clickhouse_client()
