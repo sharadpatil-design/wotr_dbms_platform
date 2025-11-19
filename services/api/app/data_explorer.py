@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from clickhouse_driver import Client as ClickHouseClient
 import os
-from auth import get_api_key
+from .auth import get_api_key
 
 router = APIRouter(prefix="/explorer", tags=["data-explorer"])
 

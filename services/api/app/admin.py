@@ -11,7 +11,7 @@ from clickhouse_driver import Client as ClickHouseClient
 from minio import Minio
 from kafka import KafkaAdminClient
 import os
-from auth import get_api_key
+from .auth import get_api_key
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

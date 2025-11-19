@@ -14,22 +14,22 @@ from prometheus_client import (
 )
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from auth import get_api_key
-from retention import RETENTION_POLICIES
-from rate_limiting import limiter, RATE_LIMITS
-from cors_config import CORS_CONFIG
-from tracing import init_tracing, get_tracer, add_span_attributes, record_exception
-from structured_logging import setup_logging, get_logger, RequestLogger
-from schemas import IngestRequest, validate_payload, DataQualityCheck, ValidationResult
-from schema_evolution import get_schema_registry, AvroSerializer
-from admin import router as admin_router
-from data_explorer import router as explorer_router
-from connection_pool import (
+from .auth import get_api_key
+from .retention import RETENTION_POLICIES
+from .rate_limiting import limiter, RATE_LIMITS
+from .cors_config import CORS_CONFIG
+from .tracing import init_tracing, get_tracer, add_span_attributes, record_exception
+from .structured_logging import setup_logging, get_logger, RequestLogger
+from .schemas import IngestRequest, validate_payload, DataQualityCheck, ValidationResult
+from .schema_evolution import get_schema_registry, AvroSerializer
+from .admin import router as admin_router
+from .data_explorer import router as explorer_router
+from .connection_pool import (
     initialize_pools, close_all_pools,
     get_pg_connection, get_clickhouse_client, get_kafka_producer, get_redis_client
 )
-from cache import CacheManager, StatsCache, warm_stats_cache, cache_result
-from clickhouse_optimization import initialize_clickhouse_optimizations
+from .cache import CacheManager, StatsCache, warm_stats_cache, cache_result
+from .clickhouse_optimization import initialize_clickhouse_optimizations
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
