@@ -24,6 +24,12 @@ from schemas import IngestRequest, validate_payload, DataQualityCheck, Validatio
 from schema_evolution import get_schema_registry, AvroSerializer
 from admin import router as admin_router
 from data_explorer import router as explorer_router
+from connection_pool import (
+    initialize_pools, close_all_pools,
+    get_pg_connection, get_clickhouse_client, get_kafka_producer, get_redis_client
+)
+from cache import CacheManager, StatsCache, warm_stats_cache, cache_result
+from clickhouse_optimization import initialize_clickhouse_optimizations
 
 # --- Prometheus Metrics ---
 REQUEST_COUNT = Counter(
@@ -69,6 +75,9 @@ DATA_QUALITY_SCORE = Histogram(
 # Setup structured logging
 setup_logging()
 logger = get_logger(__name__)
+
+# Global cache manager (initialized on startup)
+cache_manager = None
 
 app = FastAPI(title="WOTR Data API")
 
@@ -155,8 +164,9 @@ POSTGRES = {
 }
 
 
-# ---- Helper Functions ----
+# ---- Helper Functions (Updated to use connection pools) ----
 def get_pg():
+    """Get PostgreSQL connection (legacy - for initialization)."""
     with DB_QUERY_LATENCY.time():
         conn = psycopg2.connect(**POSTGRES)
         cur = conn.cursor()
@@ -187,12 +197,8 @@ def get_kafka():
 
 def check_clickhouse():
     try:
-        client = ClickHouseClient(
-            host=os.getenv("CLICKHOUSE_HOST", "clickhouse"),
-            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
-            user=os.getenv("CLICKHOUSE_USER", "default"),
-            password=os.getenv("CLICKHOUSE_PASSWORD", "")
-        )
+        # Use pooled connection
+        client = get_clickhouse_client()
         client.execute("SELECT 1")
         return "ok"
     except Exception as e:
@@ -338,20 +344,20 @@ def ingest(request: Request, item: IngestRequest, api_key: str = Depends(get_api
                     minio.put_object(MINIO_BUCKET, key, io.BytesIO(data), len(data), "application/json")
                     logger.debug(f"Uploaded to MinIO: {key}")
 
-                # Send to Kafka
+                # Send to Kafka (using pooled producer)
                 with tracer.start_as_current_span("kafka_publish"):
-                    kafka = get_kafka()
+                    kafka = get_kafka_producer()
                     kafka.send(KAFKA_TOPIC, json.dumps(record).encode("utf-8"))
                     kafka.flush()
                     logger.debug(f"Published to Kafka topic: {KAFKA_TOPIC}")
 
-                # Store metadata in Postgres
+                # Store metadata in Postgres (using pooled connection)
                 with tracer.start_as_current_span("postgres_insert"):
-                    conn = get_pg()
-                    cur = conn.cursor()
-                    cur.execute("INSERT INTO ingest_meta VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING;", (obj_id, key, datetime.utcnow(), len(data)))
-                    conn.commit()
-                    conn.close()
+                    with get_pg_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute("INSERT INTO ingest_meta VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING;", (obj_id, key, datetime.utcnow(), len(data)))
+                        conn.commit()
+                    logger.debug(f"Stored metadata in Postgres")
                     logger.debug(f"Stored metadata in Postgres")
                     
             except Exception as e:
@@ -383,7 +389,63 @@ def get_retention_policies(request: Request, api_key: str = Depends(get_api_key)
 
 @app.on_event("startup")
 def on_startup():
+    global cache_manager
+    
     app_uptime.set(1)
+    
     # Initialize distributed tracing
     init_tracing(app, service_name="wotr-api")
-    logger.info("WOTR API started", extra={"service": "wotr-api"})
+    logger.info("WOTR API starting...", extra={"service": "wotr-api"})
+    
+    # Initialize connection pools
+    try:
+        initialize_pools()
+        logger.info("Connection pools initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize connection pools: {e}")
+        raise
+    
+    # Initialize cache manager
+    try:
+        redis_client = get_redis_client()
+        cache_manager = CacheManager(redis_client)
+        logger.info("Cache manager initialized")
+        
+        # Warm cache
+        warm_stats_cache(cache_manager)
+        logger.info("Cache warmed")
+    except Exception as e:
+        logger.warning(f"Failed to initialize cache (non-fatal): {e}")
+    
+    # Initialize ClickHouse optimizations
+    try:
+        clickhouse_client = get_clickhouse_client()
+        initialize_clickhouse_optimizations(clickhouse_client)
+        logger.info("ClickHouse optimizations initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize ClickHouse optimizations (non-fatal): {e}")
+    
+    # Initialize database schema
+    try:
+        conn = get_pg()
+        conn.close()
+        logger.info("Database schema initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database schema: {e}")
+    
+    logger.info("WOTR API started successfully", extra={"service": "wotr-api"})
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Clean up resources on shutdown."""
+    logger.info("WOTR API shutting down...")
+    
+    try:
+        close_all_pools()
+        logger.info("Connection pools closed")
+    except Exception as e:
+        logger.error(f"Error closing connection pools: {e}")
+    
+    app_uptime.set(0)
+    logger.info("WOTR API stopped")
